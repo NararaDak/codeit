@@ -1,0 +1,61 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual Environment
+.venv/
+venv/
+ENV/
+env/
+
+# Jupyter Notebook
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Data files (large files)
+*.pth
+*.pt
+*.h5
+*.pkl
+*.pickle
+*.csv
+*.txt
+*.log
+
+# Mission specific data directories
+data/
+**/data/
+**/modelfiles/
+**/images/
+**/annotations/
+runs/
+**/runs/
+
+# Temporary files
+*.tmp
+*.temp
+*.lock
+
+# Archives
+*.zip
+*.tar.gz
+*.rar
