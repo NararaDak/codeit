@@ -7,8 +7,12 @@
 ```
 CodeIt/
 ├── mission7/          # Mission 7: 객체 탐지 (Object Detection)
-│   └── src/          # 소스 코드
+│   ├── *.py          # Python 소스 코드
+│   └── *.ipynb       # Jupyter Notebook 파일
 ├── mission8/          # Mission 8: 이미지 세그멘테이션 (Image Segmentation)
+│   ├── M8C01.py      # 메인 학습 코드
+│   ├── M8C01_call.py # CLI 실행 스크립트
+│   └── *.ipynb       # Jupyter Notebook 파일
 ├── back/             # 학습 자료 및 참고 코드
 ├── doc/              # 문서
 └── data/             # 데이터셋 (gitignore에 포함)
@@ -49,8 +53,13 @@ pip install tqdm filelock
 ### Mission 7 - 객체 탐지 테스트
 
 ```bash
-# 노트북에서 실행
-jupyter notebook mission7/src/07_1팀_김영욱\ copy\ 5.ipynb
+# Jupyter Notebook에서 실행
+cd mission7
+jupyter notebook "07_1팀_김영욱 copy 5.ipynb"
+
+# 또는 Python 스크립트로 실행
+python E01.py  # YOLO 테스트
+python D01.py  # SSD 테스트
 ```
 
 ### Mission 8 - 세그멘테이션 학습
