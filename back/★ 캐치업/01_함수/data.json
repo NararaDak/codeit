@@ -1,0 +1,23 @@
+{
+  "region": [
+    "Seoul",
+    "Busan",
+    "Daegu",
+    "Seoul",
+    null
+  ],
+  "age": [
+    25,
+    32,
+    null,
+    29,
+    33
+  ],
+  "gender": [
+    "M",
+    "F",
+    "M",
+    "F",
+    "F"
+  ]
+}

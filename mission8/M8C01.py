@@ -37,13 +37,13 @@ import typing  # 타입 힌트 사용을 위해 추가
 # ════════════════════════════════════════
 # ▣ Meta/유틸리티함수.
 # ════════════════════════════════════════
-ver = "2025.11.29.001"
+ver = "2025.11.29.002"
 #BASE_DIR = r"D:\01.project\CodeIt\mission8\data"
 #BASE_DIR = "/content/drive/MyDrive/codeit/mission8/data"
 #BASE_DIR = r"d:\01.project\codeitmission8\mission8\data"
 BASE_DIR = r"D:\01.project\CodeIt\data"
 LOG_FILE = f"{BASE_DIR}/m8log.txt"
-RESULT_CSV = f"{BASE_DIR}/result.csv"
+RESULT_CSV = f"{BASE_DIR}/m8result.csv"
 BASE_DIR = f"{BASE_DIR}/football"
 
 ## 구분선 출력 함수
@@ -67,7 +67,7 @@ def OpLog(log, bLines=True):
     except Exception:
         caller_name = "UnknownFunction"
         
-    log_filename = os.path.join(BASE_DIR, "op_log.txt")
+    log_filename = LOG_FILE
     log_lock_filename = log_filename + ".lock"
     log_content = f"[{now_str()}] {caller_name}: {log}\n"
     try:
@@ -413,7 +413,7 @@ TestLoader()
 # ▣ 평가 지표 및 모델 관리
 # ════════════════════════════════════════
 ## 평가 지표 저장 함수.csv파일에 저장.
-def save_metrics_to_csv(metrics, params_name, epochs, learnRate, epoch_index, data_set_name):
+def save_metrics_to_csv(metrics, params_name, transform_type,epochs, learnRate, epoch_index, data_set_name):
     mAP = metrics.get('mAP', 0.0)
     avg_loss = metrics.get('avg_loss', 0.0)
     ce_loss = metrics.get('ce_loss', 0.0)
@@ -424,7 +424,8 @@ def save_metrics_to_csv(metrics, params_name, epochs, learnRate, epoch_index, da
     f1_score = metrics.get('f1_score', 0.0)
     
     new_data = {
-        'Strategy': [params_name], 'Max_Epochs': [epochs], 'Epoch_Index': [epoch_index],
+        'timestamp':now_str(), 'Strategy': [params_name],
+        'Transform': [transform_type], 'Max_Epochs': [epochs], 'Epoch_Index': [epoch_index],
         'DataSet': [data_set_name], 'LearnRate': [learnRate], 
         'TotalLoss': [avg_loss], 'CELoss': [ce_loss], 'DiceLoss': [dice_loss],
         'Accuracy': [accuracy], 'mIoU': [mAP],
@@ -539,42 +540,53 @@ class DiceLoss(nn.Module):
         return 1 - dice
 
 ## 평가 이미지 저장 함수 
-def SaveEvalImages(images, true_masks, pred_masks, modelName, numEpoch, epochIndex):
-    # ▶ 평가 결과 이미지 저장 (원본, GT, 예측)
-    save_dir = f"{BASE_DIR}/modelfiles/eval_images"
+def SaveEvalImages(images, true_masks, pred_masks, modelName, transformType, numEpoch, lr ,epochIndex, max_images=10):
+    # ▶ 평가 결과 이미지 저장 (원본, GT, 예측) - 최대 max_images개까지
+    save_dir = f"{BASE_DIR}/modelfiles/eval_images/{modelName}_{transformType}_{numEpoch}_{lr}"
     makedirs(save_dir)  # 디렉토리가 없으면 생성
-    saveFileName = f"{save_dir}/{modelName}_{numEpoch}_{epochIndex}.png"
-
-    # 시각화를 위해 0번째 배치 아이템 사용
-    img = images[0].cpu().permute(1, 2, 0).numpy()
-    true_mask = true_masks[0].cpu().numpy()
-    pred_mask = pred_masks[0].cpu().numpy()
-
-    # 역정규화
-    mean = np.array([0.485, 0.456, 0.406])
-    std = np.array([0.229, 0.224, 0.225])
-    img = std * img + mean
-    img = np.clip(img, 0, 1)
-
-    fig, axes = plt.subplots(1, 3, figsize=(15, 5))
     
-    axes[0].imshow(img)
-    axes[0].set_title(f"Epoch {epochIndex} - Original")
-    axes[0].axis('off')
+    # 배치 크기와 max_images 중 작은 값 선택
+    num_to_save = min(images.size(0), max_images)
+    
+    # 여러 이미지를 한 파일에 저장
+    fig, axes = plt.subplots(num_to_save, 3, figsize=(15, 5 * num_to_save))
+    
+    # axes가 1차원 배열인 경우 2차원으로 변환
+    if num_to_save == 1:
+        axes = axes.reshape(1, -1)
+    
+    for i in range(num_to_save):
+        # 이미지 데이터 추출
+        img = images[i].cpu().permute(1, 2, 0).numpy()
+        true_mask = true_masks[i].cpu().numpy()
+        pred_mask = pred_masks[i].cpu().numpy()
 
-    axes[1].imshow(true_mask, cmap='jet')
-    axes[1].set_title("Ground Truth")
-    axes[1].axis('off')
+        # 역정규화
+        mean = np.array([0.485, 0.456, 0.406])
+        std = np.array([0.229, 0.224, 0.225])
+        img = std * img + mean
+        img = np.clip(img, 0, 1)
 
-    axes[2].imshow(pred_mask, cmap='jet')
-    axes[2].set_title("Prediction")
-    axes[2].axis('off')
+        # 시각화
+        axes[i, 0].imshow(img)
+        axes[i, 0].set_title(f"Sample {i+1} - Original")
+        axes[i, 0].axis('off')
 
-    plt.suptitle(f"Model: {modelName} - Epoch {epochIndex}/{numEpoch}", fontsize=16)
+        axes[i, 1].imshow(true_mask, cmap='jet')
+        axes[i, 1].set_title("Ground Truth")
+        axes[i, 1].axis('off')
+
+        axes[i, 2].imshow(pred_mask, cmap='jet')
+        axes[i, 2].set_title("Prediction")
+        axes[i, 2].axis('off')
+
+    plt.suptitle(f"Model: {modelName} ({transformType}) - Epoch {epochIndex}/{numEpoch}", fontsize=16)
     plt.tight_layout()
+    
+    saveFileName = f"{save_dir}/{modelName}_{transformType}_{numEpoch}_{lr}_{epochIndex}.png"
     plt.savefig(saveFileName)
     plt.close(fig)
-    OpLog(f"Saved evaluation image to {saveFileName}")
+    OpLog(f"Saved {num_to_save} evaluation images to {saveFileName}")
 
 ## 테스트용 평가 이미지 저장 함수
 def TestSaveEvalImages():
@@ -582,7 +594,7 @@ def TestSaveEvalImages():
     model = UNet(MY_META.num_classes())
     model.load_state_dict(torch.load(f"{BASE_DIR}/modelfiles/UNet_50_1.pth"))
     model.eval()
-    SaveEvalImages(*next(iter(test_loader)), model.GetMyName(), 50, 1)
+    SaveEvalImages(*next(iter(test_loader)), model.getMyName(), model.getTransformType(), 50, 1)
 #TestSaveEvalImages()
 
 # ════════════════════════════════════════
@@ -592,11 +604,11 @@ def TestSaveEvalImages():
 def SaveModel(model,epochs,epochIndex):
     save_dir = f"{BASE_DIR}/modelfiles"
     makedirs(save_dir)
-    torch.save(model.state_dict(), f"{save_dir}/{model.GetMyName()}_{epochs}_{epochIndex}.pth")
+    torch.save(model.state_dict(), f"{save_dir}/{model.getMyName()}_{model.getTransformType()}_{epochs}_{model.getLr()}_{epochIndex}.pth")
 
 ## 모델 로드 함수
 def LoadModel(model,epochs,epochIndex):
-    model.load_state_dict(torch.load(f"{BASE_DIR}/modelfiles/{model.GetMyName()}_{epochs}_{epochIndex}.pth"))
+    model.load_state_dict(torch.load(f"{BASE_DIR}/modelfiles/{model.getMyName()}_{model.getTransformType()}_{epochs}_{model.getLr()}_{epochIndex}.pth"))
     model.eval()
 
 ## BaseModel 클래스
@@ -620,8 +632,7 @@ class BaseModel(nn.Module):
     def getTransformType(self):
         return self._transform_type
     
-    ## 모델 학습 함수 CE Loss + Dice Loss 결합
-    def fit(self, train_loader, test_loader, num_epochs, lr):
+    def fit_org(self, train_loader, test_loader, num_epochs, lr):
         device = MY_META.device()
         ce_criterion = nn.CrossEntropyLoss()
         dice_criterion = DiceLoss(num_classes=MY_META.num_classes())
@@ -663,6 +674,7 @@ class BaseModel(nn.Module):
             eval_dice_loss = 0.0
             eval_total_loss = 0.0
             
+            index = 0
             with torch.no_grad():
                 for images, masks in tqdm(test_loader, desc=f"Epoch {epoch+1}/{num_epochs} [Eval]"):
                     images, masks = images.to(device), masks.to(device)
@@ -680,6 +692,9 @@ class BaseModel(nn.Module):
                     preds = torch.argmax(outputs, dim=1)
                     all_preds.append(preds.cpu())
                     all_masks.append(masks.cpu())
+                    index += 1
+                    msg = f"{self._name}.{self._transform_type}.{num_epochs}.{lr}.EPOCH:{epoch+1}:{index}/{len(test_loader)}:Eval Batch - CE Loss: {ce_loss.item():.4f}, Dice Loss: {dice_loss.item():.4f}, Total Loss: {total_loss.item():.4f}"
+                    OpLog(msg, bLines=False)
 
             all_preds = torch.cat(all_preds)
             all_masks = torch.cat(all_masks)
@@ -689,15 +704,19 @@ class BaseModel(nn.Module):
             metrics['dice_loss'] = eval_dice_loss / len(test_loader)
             
             OpLog(f"Epoch {epoch+1} Eval - CE Loss: {metrics['ce_loss']:.4f}, Dice Loss: {metrics['dice_loss']:.4f}, Total Loss: {metrics['avg_loss']:.4f}, mIoU: {metrics['mAP']:.4f}")
-            save_metrics_to_csv(metrics, self.GetMyName(), num_epochs, lr, epoch + 1, "Test")
+            save_metrics_to_csv(metrics, self.getMyName(),self._transform_type, num_epochs, lr, epoch + 1, "Test")
             SaveModel(self, num_epochs, epoch + 1)
 
             ### 에포크별 결과 시각화
             self.eval()
             with torch.no_grad():
                 test_iter = iter(test_loader)
-                num_samples_to_show = 3
-                plt.figure(figsize=(15, 5 * num_samples_to_show))
+                num_samples_to_show = 10  # SaveEvalImages의 max_images와 맞춤
+                
+                # 시각화를 위한 이미지 수집
+                all_images = []
+                all_masks = []
+                all_preds = []
                 
                 for i in range(num_samples_to_show):
                     try:
@@ -708,6 +727,11 @@ class BaseModel(nn.Module):
                     images, masks = images.to(device), masks.to(device)
                     outputs = self(images)
                     preds = torch.argmax(outputs, dim=1)
+                    
+                    # 이미지 수집
+                    all_images.append(images[0].cpu())
+                    all_masks.append(masks[0].cpu())
+                    all_preds.append(preds[0].cpu())
 
                     ### 시각화를 위해 0번째 배치 아이템 사용
                     img = images[0].cpu().permute(1, 2, 0).numpy()
@@ -737,8 +761,158 @@ class BaseModel(nn.Module):
 
                 plt.suptitle(f"Epoch {epoch+1} Results", fontsize=16)
                 ShowPlt(plt)
-                SaveEvalImages(images.cpu(), masks.cpu(), preds.cpu(), self.GetMyName(), num_epochs, epoch + 1)
+                
+                # 수집된 모든 이미지를 배치로 변환하여 저장
+                if len(all_images) > 0:
+                    batch_images = torch.stack(all_images)
+                    batch_masks = torch.stack(all_masks)
+                    batch_preds = torch.stack(all_preds)
+                    SaveEvalImages(batch_images, batch_masks, batch_preds, self.getMyName(), self._transform_type, num_epochs, self.getLr(), epoch + 1)
             scheduler.step()
+
+    ## 모델 학습 함수 CE Loss + Dice Loss 결합
+    def fit(self, train_loader, test_loader, num_epochs, lr):
+        device = MY_META.device()
+        ce_criterion = nn.CrossEntropyLoss()
+        dice_criterion = DiceLoss(num_classes=MY_META.num_classes())
+        optimizer = torch.optim.Adam(self.parameters(), lr=lr)
+        scheduler = StepLR(optimizer, step_size=10, gamma=0.1)
+
+        for epoch in range(num_epochs):
+            self.train()
+            running_ce_loss = 0.0
+            running_dice_loss = 0.0
+            running_total_loss = 0.0
+            index = 0 
+            for images, masks in tqdm(train_loader, desc=f"Epoch {epoch+1}/{num_epochs} [Train]"):
+                images, masks = images.to(device), masks.to(device)
+                optimizer.zero_grad()
+                outputs = self(images)
+                
+                ### Cross Entropy Loss와 Dice Loss를 결합
+                ce_loss = ce_criterion(outputs, masks)
+                dice_loss = dice_criterion(outputs, masks)
+                loss = ce_loss + dice_loss
+                
+                loss.backward()
+                optimizer.step()
+                
+                running_ce_loss += ce_loss.item()
+                running_dice_loss += dice_loss.item()
+                running_total_loss += loss.item()
+                index += 1
+                msg = f"{self._name}.{self._transform_type}.{num_epochs}.{lr}.EPOCH:{epoch+1}:{index}/{len(train_loader)}:Train Batch - CE Loss: {ce_loss.item():.4f}, Dice Loss: {dice_loss.item():.4f}, Total Loss: {loss.item():.4f}"
+                OpLog(msg, bLines=False)
+
+
+            train_ce_loss = running_ce_loss / len(train_loader)
+            train_dice_loss = running_dice_loss / len(train_loader)
+            train_total_loss = running_total_loss / len(train_loader)
+            OpLog(f"Epoch {epoch+1} Train - CE Loss: {train_ce_loss:.4f}, Dice Loss: {train_dice_loss:.4f}, Total Loss: {train_total_loss:.4f}")
+
+            ### 검증 단계
+            self.eval()
+            all_preds, all_masks = [], []
+            eval_ce_loss = 0.0
+            eval_dice_loss = 0.0
+            eval_total_loss = 0.0
+            
+            index = 0
+            with torch.no_grad():
+                for images, masks in tqdm(test_loader, desc=f"Epoch {epoch+1}/{num_epochs} [Eval]"):
+                    images, masks = images.to(device), masks.to(device)
+                    outputs = self(images)
+                    
+                    #### Cross Entropy Loss와 Dice Loss 계산
+                    ce_loss = ce_criterion(outputs, masks)
+                    dice_loss = dice_criterion(outputs, masks)
+                    total_loss = ce_loss + dice_loss
+                    
+                    eval_ce_loss += ce_loss.item()
+                    eval_dice_loss += dice_loss.item()
+                    eval_total_loss += total_loss.item()
+                    
+                    preds = torch.argmax(outputs, dim=1)
+                    all_preds.append(preds.cpu())
+                    all_masks.append(masks.cpu())
+                    index += 1
+                    msg = f"{self._name}.{self._transform_type}.{num_epochs}.{lr}.EPOCH:{epoch+1}:{index}/{len(test_loader)}:Eval Batch - CE Loss: {ce_loss.item():.4f}, Dice Loss: {dice_loss.item():.4f}, Total Loss: {total_loss.item():.4f}"
+                    OpLog(msg, bLines=False)
+
+            all_preds = torch.cat(all_preds)
+            all_masks = torch.cat(all_masks)
+            metrics = calculate_metrics(all_preds, all_masks, MY_META.num_classes())
+            metrics['avg_loss'] = eval_total_loss / len(test_loader)
+            metrics['ce_loss'] = eval_ce_loss / len(test_loader)
+            metrics['dice_loss'] = eval_dice_loss / len(test_loader)
+            
+            OpLog(f"Epoch {epoch+1} Eval - CE Loss: {metrics['ce_loss']:.4f}, Dice Loss: {metrics['dice_loss']:.4f}, Total Loss: {metrics['avg_loss']:.4f}, mIoU: {metrics['mAP']:.4f}")
+            save_metrics_to_csv(metrics, self.getMyName(),self._transform_type, num_epochs, lr, epoch + 1, "Test")
+            SaveModel(self, num_epochs, epoch + 1)
+
+            ### 에포크별 결과 시각화
+            self.eval()
+            with torch.no_grad():
+                test_iter = iter(test_loader)
+                num_samples_to_show = 10  # SaveEvalImages의 max_images와 맞춤
+                
+                # 시각화를 위한 이미지 수집
+                all_images = []
+                all_masks = []
+                all_preds = []
+                
+                for i in range(num_samples_to_show):
+                    try:
+                        images, masks = next(test_iter)
+                    except StopIteration:
+                        break
+
+                    images, masks = images.to(device), masks.to(device)
+                    outputs = self(images)
+                    preds = torch.argmax(outputs, dim=1)
+                    
+                    # 이미지 수집
+                    all_images.append(images[0].cpu())
+                    all_masks.append(masks[0].cpu())
+                    all_preds.append(preds[0].cpu())
+
+                    ### 시각화를 위해 0번째 배치 아이템 사용
+                    img = images[0].cpu().permute(1, 2, 0).numpy()
+                    mask = masks[0].cpu().numpy()
+                    pred = preds[0].cpu().numpy()
+
+                    ### 역정규화
+                    mean = np.array([0.485, 0.456, 0.406])
+                    std = np.array([0.229, 0.224, 0.225])
+                    img = std * img + mean
+                    img = np.clip(img, 0, 1)
+
+                    plt.subplot(num_samples_to_show, 3, i * 3 + 1)
+                    plt.imshow(img)
+                    plt.title(f"Epoch {epoch+1} - Original")
+                    plt.axis('off')
+
+                    plt.subplot(num_samples_to_show, 3, i * 3 + 2)
+                    plt.imshow(mask, cmap='jet')
+                    plt.title("Ground Truth")
+                    plt.axis('off')
+
+                    plt.subplot(num_samples_to_show, 3, i * 3 + 3)
+                    plt.imshow(pred, cmap='jet')
+                    plt.title("Prediction")
+                    plt.axis('off')
+
+                plt.suptitle(f"Epoch {epoch+1} Results", fontsize=16)
+                ShowPlt(plt)
+                
+                # 수집된 모든 이미지를 배치로 변환하여 저장
+                if len(all_images) > 0:
+                    batch_images = torch.stack(all_images)
+                    batch_masks = torch.stack(all_masks)
+                    batch_preds = torch.stack(all_preds)
+                    SaveEvalImages(batch_images, batch_masks, batch_preds, self.getMyName(), self._transform_type, num_epochs, self.getLr(), epoch + 1)
+            scheduler.step()
+        
 
 ## U-Net 모델 정의.(기본 U-Net)
 class UNet(BaseModel):
@@ -903,50 +1077,61 @@ class TransferLearningUNet(BaseModel):
         self._epochs = epochs
         self._lr = lr
         self._name = "TransferLearningUNet_ResNet34"
+        
+        # ResNet34 백본 로드
         resnet = models.resnet34(weights=models.ResNet34_Weights.IMAGENET1K_V1)
-        self.encoder1 = nn.Sequential(resnet.conv1, resnet.bn1, resnet.relu)
+        
+        # 인코더: ResNet34 레이어 사용
+        # e1: 64 channels, e2: 64 channels, e3: 128 channels, e4: 256 channels, bottleneck: 512 channels
+        self.encoder1 = nn.Sequential(resnet.conv1, resnet.bn1, resnet.relu)  # 64 channels
         self.pool = resnet.maxpool
-        self.encoder2 = resnet.layer1
-        self.encoder3 = resnet.layer2
-        self.encoder4 = resnet.layer3
-        self.bottleneck = resnet.layer4
+        self.encoder2 = resnet.layer1  # 64 channels
+        self.encoder3 = resnet.layer2  # 128 channels
+        self.encoder4 = resnet.layer3  # 256 channels
+        self.bottleneck = resnet.layer4  # 512 channels
+        
+        # 디코더: 채널 수를 ResNet34 출력에 맞게 조정
         self.upconv4 = nn.ConvTranspose2d(512, 256, kernel_size=2, stride=2)
-        self.decoder4 = nn.Sequential(nn.Conv2d(512, 256, 3, padding=1), nn.ReLU(inplace=True))
+        self.decoder4 = nn.Sequential(nn.Conv2d(512, 256, 3, padding=1), nn.ReLU(inplace=True))  # 256 + 256 = 512
+        
         self.upconv3 = nn.ConvTranspose2d(256, 128, kernel_size=2, stride=2)
-        self.decoder3 = nn.Sequential(nn.Conv2d(256, 128, 3, padding=1), nn.ReLU(inplace=True))
+        self.decoder3 = nn.Sequential(nn.Conv2d(256, 128, 3, padding=1), nn.ReLU(inplace=True))  # 128 + 128 = 256
+        
         self.upconv2 = nn.ConvTranspose2d(128, 64, kernel_size=2, stride=2)
-        self.decoder2 = nn.Sequential(nn.Conv2d(128, 64, 3, padding=1), nn.ReLU(inplace=True))
+        self.decoder2 = nn.Sequential(nn.Conv2d(128, 64, 3, padding=1), nn.ReLU(inplace=True))  # 64 + 64 = 128
+        
         self.upconv1 = nn.ConvTranspose2d(64, 64, kernel_size=2, stride=2)
-        self.decoder1 = nn.Sequential(nn.Conv2d(128, 64, 3, padding=1), nn.ReLU(inplace=True))
+        self.decoder1 = nn.Sequential(nn.Conv2d(128, 64, 3, padding=1), nn.ReLU(inplace=True))  # 64 + 64 = 128
+        
         self.final_conv = nn.Conv2d(64, self._num_classes, kernel_size=1)
 
     ## 순전파 정의
     def forward(self, x):
-        e1 = self.encoder1(x)
-        e2 = self.encoder2(self.pool(e1))
-        e3 = self.encoder3(e2)
-        e4 = self.encoder4(e3)
-        b = self.bottleneck(e4)
+        # 인코더 (다운샘플링)
+        e1 = self.encoder1(x)      # 64 channels
+        e2 = self.encoder2(self.pool(e1))  # 64 channels
+        e3 = self.encoder3(e2)     # 128 channels
+        e4 = self.encoder4(e3)     # 256 channels
+        b = self.bottleneck(e4)    # 512 channels
 
-        d4 = self.upconv4(b)
-        d4 = torch.cat((d4, e3), dim=1)
-        d4 = self.decoder4(d4)
+        # 디코더 (업샘플링 + skip connections)
+        d4 = self.upconv4(b)       # 512 -> 256
+        d4 = torch.cat((d4, e4), dim=1)  # 256 + 256 = 512
+        d4 = self.decoder4(d4)     # 512 -> 256
 
-        d3 = self.upconv3(d4)
-        d3 = torch.cat((d3, e2), dim=1)
-        d3 = self.decoder3(d3)
+        d3 = self.upconv3(d4)      # 256 -> 128
+        d3 = torch.cat((d3, e3), dim=1)  # 128 + 128 = 256
+        d3 = self.decoder3(d3)     # 256 -> 128
 
-        d2 = self.upconv2(d3)
+        d2 = self.upconv2(d3)      # 128 -> 64
+        d2 = torch.cat((d2, e2), dim=1)  # 64 + 64 = 128
+        d2 = self.decoder2(d2)     # 128 -> 64
         
-        d2 = self.upconv2(d3)
-        d2 = torch.cat((d2, e2), dim=1)
-        d2 = self.decoder2(d2)
-        
-        d1 = self.upconv1(d2)
-        d1 = torch.cat((d1, e1), dim=1)
-        d1 = self.decoder1(d1)
+        d1 = self.upconv1(d2)      # 64 -> 64
+        d1 = torch.cat((d1, e1), dim=1)  # 64 + 64 = 128
+        d1 = self.decoder1(d1)     # 128 -> 64
 
-        # Add final upsampling to restore original size
+        # 최종 업샘플링으로 원본 크기 복원
         out = nn.functional.interpolate(d1, scale_factor=2, mode='bilinear', align_corners=False)
         return self.final_conv(out)
 
@@ -961,7 +1146,7 @@ def TrainModel(model_type='UNet', transform_type="A", numEpochs=50, learningRate
 
     ## 모델 인스턴스 생성
     if model_type == 'UNet':
-        model = UNet(transform_type==transform_type, epochs=numEpochs, lr=learningRate).to(device)
+        model = UNet(transform_type=transform_type, epochs=numEpochs, lr=learningRate).to(device)
     elif model_type == 'AdvancedUNet':
         model = AdvancedUNet(transform_type=transform_type, epochs=numEpochs, lr=learningRate).to(device)
     elif model_type == 'TransferLearningUNet':
@@ -982,7 +1167,7 @@ def TestModel(model, test_loader):
     # 디렉토리가 없으면 생성
     save_dir = f"{BASE_DIR}/modelfiles/test_images"
     makedirs(save_dir)
-    save_filename = f"{save_dir}/{model.GetMyName()}_test_results.png"
+    save_filename = f"{save_dir}/{model.getMyName()}_test_results.png"
 
     with torch.no_grad():
         test_iter = iter(test_loader)
@@ -1022,7 +1207,7 @@ def TestModel(model, test_loader):
             axes[i, 2].set_title("Prediction")
             axes[i, 2].axis('off')
 
-        plt.suptitle(f"Test Results for {model.GetMyName()}", fontsize=16)
+        plt.suptitle(f"Test Results for {model.getMyName()}", fontsize=16)
         plt.tight_layout()
         plt.savefig(save_filename)  # 이미지 파일로 저장
         OpLog(f"Saved test result image to {save_filename}")
@@ -1052,18 +1237,43 @@ def Run_SingleModel(transform_type="A" , modelType='AdvancedUNet', numEpochs=20,
 # ════════════════════════════════════════
 
 # UNet: 기본 U-Net 모델 (가장 빠르지만 성능은 중간)
-# Run_SingleModel("A",'UNet', numEpochs=30, learningRate=0.001)
+# AdvancedUNet: Attention 메커니즘 적용 (성능 향상, 속도는 약간 느림)
+# TransferLearningUNet: ResNet34 백본 사용 (가장 높은 성능, 속도는 가장 느림)
+
 # Run_SingleModel("D",'UNet', numEpochs=30, learningRate=0.001)
-
-
-# AdvancedUNet: Attention 메커니즘 적용 (중간 속도, 높은 성능)
-# Run_SingleModel("A",'AdvancedUNet', numEpochs=30, learningRate=0.001)
 # Run_SingleModel("D",'AdvancedUNet', numEpochs=30, learningRate=0.001)
-
-
-# TransferLearningUNet: ResNet34 백본 사용 (느리지만 최고 성능)
-Run_SingleModel("A",'TransferLearningUNet', numEpochs=30, learningRate=0.0005)
 # Run_SingleModel("D",'TransferLearningUNet', numEpochs=30, learningRate=0.0005)
 
+# Run_SingleModel("A",'UNet', numEpochs=30, learningRate=0.001)
+# Run_SingleModel("A",'AdvancedUNet', numEpochs=30, learningRate=0.001)
+# Run_SingleModel("A",'TransferLearningUNet', numEpochs=30, learningRate=0.0005)
 
-        
+# Run_SingleModel("B",'UNet', numEpochs=30, learningRate=0.001)
+# Run_SingleModel("B",'AdvancedUNet', numEpochs=30, learningRate=0.001)
+# Run_SingleModel("B",'TransferLearningUNet', numEpochs=30, learningRate=0.0005)
+
+# Run_SingleModel("C",'UNet', numEpochs=30, learningRate=0.001)
+# Run_SingleModel("C",'AdvancedUNet', numEpochs=30, learningRate=0.001)
+# Run_SingleModel("C",'TransferLearningUNet', numEpochs=30, learningRate=0.0005)
+# ════════════════════════════════════════
+# ▣ 모든 모델 학습 실행 함수    
+# ════════════════════════════════════════
+# UNet: 기본 U-Net 모델 (가장 빠르지만 성능은 중간)
+# AdvancedUNet: Attention 메커니즘 적용 (성능 향상, 속도는 약간 느림)
+# TransferLearningUNet: ResNet34 백본 사용 (가장 높은 성능, 속도는 가장 느림)
+def Run_AllModels(numEpochs=20, learningRate=0.001):
+    Run_SingleModel("A",'UNet', numEpochs=numEpochs, learningRate=learningRate)
+    Run_SingleModel("A",'AdvancedUNet', numEpochs=numEpochs, learningRate=learningRate)
+    Run_SingleModel("A",'TransferLearningUNet', numEpochs=numEpochs, learningRate=learningRate)
+
+    Run_SingleModel("B",'UNet', numEpochs=numEpochs, learningRate=learningRate)
+    Run_SingleModel("B",'AdvancedUNet', numEpochs=numEpochs, learningRate=learningRate)
+    Run_SingleModel("B",'TransferLearningUNet', numEpochs=numEpochs, learningRate=learningRate)
+
+    Run_SingleModel("C",'UNet', numEpochs=numEpochs, learningRate=learningRate)
+    Run_SingleModel("C",'AdvancedUNet', numEpochs=numEpochs, learningRate=learningRate)
+    Run_SingleModel("C",'TransferLearningUNet', numEpochs=numEpochs, learningRate=learningRate)
+
+    Run_SingleModel("D",'UNet', numEpochs=numEpochs, learningRate=learningRate)
+    Run_SingleModel("D",'AdvancedUNet', numEpochs=numEpochs, learningRate=learningRate)
+    Run_SingleModel("D",'TransferLearningUNet', numEpochs=numEpochs, learningRate=learningRate)
