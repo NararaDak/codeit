@@ -16,6 +16,11 @@ import matplotlib.patches as patches
 from PIL import Image
 from filelock import FileLock
 
+# 한글 폰트 설정
+import matplotlib.font_manager as fm
+plt.rcParams['font.family'] = 'Malgun Gothic'  # Windows
+plt.rcParams['axes.unicode_minus'] = False  # 마이너스 기호 깨짐 방지
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -1137,6 +1142,10 @@ class TransferLearningUNet(BaseModel):
 
 print("Defined UNet, AdvancedUNet, and TransferLearningUNet models")
 
+
+# ════════════════════════════════════════
+# ▣ 학습 실행 및 테스트 함수
+# ════════════════════════════════════════
 ## 학습 실행 함수
 def TrainModel(model_type='UNet', transform_type="A", numEpochs=50, learningRate=0.005): 
     ## 모델 학습 실행 (파라미터 커스터마이징 가능)
